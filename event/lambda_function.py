@@ -109,6 +109,8 @@ def lambda_handler(event, context):
             # create an event
             # load event attributes
             data = json.loads(event["headers"]["x-amz-meta-name"])
+            print(data)
+            print(type(data))
             event_name = data["name"]
             # event_status = data["status"]
             event_tag = json.dumps(data["tag"])
