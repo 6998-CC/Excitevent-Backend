@@ -60,7 +60,7 @@ def lambda_handler(event, context):
         if path == '/event/findByTags':
             # search by tag attribute
             tags = event["queryStringParameters"]["tags"]
-            res = set()
+            res_return = set()
             tag_list = tags.split(",")
             for tag in tag_list:
                 sql_tag = f"%{tag}%"
@@ -68,9 +68,20 @@ def lambda_handler(event, context):
                 cur = conn.cursor()
                 sql_string = f"select * from Eventt where tag like '{sql_tag}'"
                 cur.execute(sql_string)
-                r = cur.fetchall()
-                for c in r:
-                    res.add(c)
+                res = cur.fetchall()
+                for r in res:
+                    res_dict = dict()
+                    res_dict['eventId'] = r[0]
+                    res_dict['name'] = r[1]
+                    res_dict['tags'] = r[2]
+                    res_dict['location'] = r[3]
+                    res_dict['date'] = r[4]
+                    res_dict['time'] = r[5]
+                    res_dict['capacity'] = r[6]
+                    res_dict['description'] = r[7]
+                    res_dict['image_url'] = r[8]
+                    res_dict['hostid'] = r[9]
+                    res_return.add(json.dumps(res_dict))
 
             return {
                 'statusCode': 200,
@@ -80,7 +91,7 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Methods': '*',
                 },
-                'body': json.dumps(list(res))
+                'body': json.dumps(list(res_return))
             }
                 
         elif resource == '/event/{eventId}':
@@ -91,6 +102,20 @@ def lambda_handler(event, context):
                 sql_string = f"select * from Eventt where eventid = {eventid}"
                 cur.execute(sql_string)
                 res = cur.fetchall()
+                res_return = []
+                for r in res: 
+                    res_dict = dict()
+                    res_dict['eventId'] = r[0]
+                    res_dict['name'] = r[1]
+                    res_dict['tags'] = r[2]
+                    res_dict['location'] = r[3]
+                    res_dict['date'] = r[4]
+                    res_dict['time'] = r[5]
+                    res_dict['capacity'] = r[6]
+                    res_dict['description'] = r[7]
+                    res_dict['image_url'] = r[8]
+                    res_dict['hostid'] = r[9]
+                    res_return.append(res_dict)
 
                 return {
                     'statusCode': 200,
@@ -100,7 +125,7 @@ def lambda_handler(event, context):
                         'Access-Control-Allow-Origin': '*',
                         'Access-Control-Allow-Methods': '*',
                     },
-                    'body': json.dumps(res)
+                    'body': json.dumps(list(res_return))
                 }
             
     
