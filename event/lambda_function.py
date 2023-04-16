@@ -7,7 +7,7 @@ import base64
 import time
 
 # rds settings
-rds_host = "mysqlforlambda.c6cg9rtsaerr.us-east-1.rds.amazonaws.com"
+rds_host  = "mysqlforlambda.c6cg9rtsaerr.us-east-1.rds.amazonaws.com"
 user_name = "admin"
 password = "Cloud6998!"
 db_name = "ExampleDB"
@@ -26,7 +26,7 @@ except pymysql.MySQLError as e:
 
 logger.info("SUCCESS: Connection to RDS MySQL instance succeeded")
 
-client = boto3.client('s3')
+client=boto3.client('s3')
 
 
 def lambda_handler(event, context):
@@ -35,28 +35,29 @@ def lambda_handler(event, context):
     path = event['path']
     resource = event['resource']
 
+
     if httpMethod == 'GET':
-        if path == '/event/findByStatus':
-            # search by status attribute
-            status = event["queryStringParameters"]["status"]
-            print(f"status is {status}")
-            with conn.cursor() as cur:
-                sql_string = f"select * from Event where status = '{status}'"
-                cur.execute(sql_string)
-                res = cur.fetchall()
+        # if path == '/event/findByStatus':
+        #     # search by status attribute
+        #     status = event["queryStringParameters"]["status"]
+        #     print(f"status is {status}")
+        #     with conn.cursor() as cur:
+        #         sql_string = f"select * from Event where status = '{status}'"
+        #         cur.execute(sql_string)
+        #         res = cur.fetchall()
 
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Headers': '*',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': '*',
-                    },
-                    'body': json.dumps(res)
-                }
-
-        elif path == '/event/findByTags':
+        #         return {
+        #             'statusCode': 200,
+        #             'headers': {
+        #                 'Content-Type': 'application/json',
+        #                 'Access-Control-Allow-Headers': '*',
+        #                 'Access-Control-Allow-Origin': '*',
+        #                 'Access-Control-Allow-Methods': '*',
+        #             },
+        #             'body': json.dumps(res)
+        #         }
+                
+        if path == '/event/findByTags':
             # search by tag attribute
             tags = event["queryStringParameters"]["tags"]
             res = set()
@@ -65,7 +66,7 @@ def lambda_handler(event, context):
                 sql_tag = f"%{tag}%"
                 print(f"tag is {tag}")
                 cur = conn.cursor()
-                sql_string = f"select * from Event where tag like '{sql_tag}'"
+                sql_string = f"select * from Eventt where tag like '{sql_tag}'"
                 cur.execute(sql_string)
                 r = cur.fetchall()
                 for c in r:
@@ -81,13 +82,13 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps(list(res))
             }
-
+                
         elif resource == '/event/{eventId}':
             # search by eventid attribute
             eventid = int(event["pathParameters"]["eventId"])
             print(f"eventid is {eventid}")
             with conn.cursor() as cur:
-                sql_string = f"select * from Event where eventid = {eventid}"
+                sql_string = f"select * from Eventt where eventid = {eventid}"
                 cur.execute(sql_string)
                 res = cur.fetchall()
 
@@ -101,22 +102,24 @@ def lambda_handler(event, context):
                     },
                     'body': json.dumps(res)
                 }
-
+            
+    
     elif httpMethod == 'POST':
         if path == '/event/createEvent':
             # create an event
             # load event attributes
             data = json.loads(event["headers"]["x-amz-meta-name"])
             event_name = data["name"]
-            event_status = data["status"]
+            # event_status = data["status"]
             event_tag = json.dumps(data["tag"])
             event_location = data["location"]
             event_date = data["date"]
             event_time = data["time"]
             event_capacity = data["capacity"]
             event_description = data["description"]
-
-            # upload image to S3 and obtain url
+            event_userid = data["userid"]
+            
+             # upload image to S3 and obtain url
             key = str(time.time()).replace('.', '') + ".PNG"
             ms = base64.b64decode(event['body'])
             response = client.put_object(
@@ -130,10 +133,9 @@ def lambda_handler(event, context):
 
             # load the event to table
             cur = conn.cursor()
-            sql_create_string = "create table if not exists Event (" \
+            sql_create_string = "create table if not exists Eventt (" \
                                 "eventid int NOT NULL AUTO_INCREMENT, " \
                                 "name varchar(255) NOT NULL, " \
-                                "status varchar(255) NOT NULL," \
                                 "tag varchar(255)," \
                                 "location varchar(255)," \
                                 "date varchar(255)," \
@@ -141,13 +143,14 @@ def lambda_handler(event, context):
                                 "capacity int," \
                                 "description varchar(3000)," \
                                 "event_image_url varchar(255)," \
-                                "PRIMARY KEY (eventid))"
-            sql_string = f"insert into Event (name, status, tag, location, date, time, capacity, description, event_image_url) values('{event_name}', '{event_status}', '{event_tag}', '{event_location}', '{event_date}', '{event_time}', {event_capacity}, '{event_description}', '{event_image_url}')"
-            # sql_string = "select * from Event"
+                                "userid VARCHAR(10), FOREIGN KEY (userid) REFERENCES User(user_uni) ON DELETE CASCADE, PRIMARY KEY (eventid))"
+            sql_string = f"insert into Eventt (name, tag, location, date, time, capacity, description, event_image_url, userid) values('{event_name}', '{event_tag}', '{event_location}', '{event_date}', '{event_time}', {event_capacity}, '{event_description}', '{event_image_url}', '{event_userid}')"
+            # sql_string = "select * from Eventt"
             cur.execute(sql_create_string)
             conn.commit()
             cur.execute(sql_string)
             res = cur.fetchall()
+
 
             return {
                 'statusCode': 200,
@@ -159,20 +162,21 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps("Created successfully!")
             }
-
+        
         elif resource == '/event/{eventId}':
-            # update an event
+            # update an event 
             eventid = int(event["pathParameters"]["eventId"])
             data = json.loads(event["headers"]["x-amz-meta-name"])
             event_name = data["name"]
-            event_status = data["status"]
+            # event_status = data["status"]
             event_tag = json.dumps(data["tag"])
-            event_location = data["location"]
+            event_location = data["location"] 
             event_date = data["date"]
             event_time = data["time"]
             event_capacity = data["capacity"]
             event_description = data["description"]
-
+            event_userid = data["userid"]
+    
             # upload image to S3 and obtain url
             key = str(time.time()).replace('.', '') + ".PNG"
             ms = base64.b64decode(event['body'])
@@ -182,14 +186,14 @@ def lambda_handler(event, context):
                 Key=key,
                 ContentType='image/png',
             )
-
+    
             event_image_url = "https://excitevent-event-image.s3.amazonaws.com/" + key
-
+    
             # load the event to table
             cur = conn.cursor()
-            sql_string = f"update Event " \
+            sql_string = f"update Eventt " \
                          f"set name = '{event_name}', " \
-                         f"status = '{event_status}', " \
+                         f"userid = '{event_userid}', " \
                          f"tag = '{event_tag}', " \
                          f"location = '{event_location}', " \
                          f"date = '{event_date}', " \
@@ -200,7 +204,7 @@ def lambda_handler(event, context):
                          f"where eventid = {eventid}"
             cur.execute(sql_string)
             conn.commit()
-
+    
             return {
                 'statusCode': 200,
                 'headers': {
@@ -211,14 +215,14 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps("Updated successfully!")
             }
-
+            
     elif httpMethod == 'DELETE':
         if resource == '/event/{eventId}':
             # delete event
             eventid = int(event["pathParameters"]["eventId"])
             print(f"eventid is {eventid}")
             cur = conn.cursor()
-            sql_string = f"delete from Event where eventid = {eventid}"
+            sql_string = f"delete from Eventt where eventid = {eventid}"
             cur.execute(sql_string)
             conn.commit()
 
