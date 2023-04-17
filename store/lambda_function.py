@@ -73,26 +73,20 @@ def getUserEvents(userId):
     cur = conn.cursor()
 
     try:
-        query = "SELECT e.eventid, e.name, e.date, e.time, e.userid " \
-                "FROM Tickets t, Eventt e " \
-                f"WHERE t.eventId=e.eventid AND t.userId='{userId}' " \
-                "UNION " \
-                "SELECT e.eventid, e.name, e.date, e.time, e.userid " \
-                "FROM Eventt e " \
-                f"WHERE e.userid='{userId}'"
-        cur.execute(query)
-        registered = cur.fetchall()
-        # print(registered)
-        res = {}
-        res['events'] = []
-        for r in registered:
-            data = {}
-            data['eventId'] = r[0]
-            data['name'] = r[1]
-            data['date'] = r[2]
-            data['time'] = r[3]
-            data['editable'] = r[4] == userId
-            res['events'].append(data)
+        results = list()
+        params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
+        cur.execute(f"SELECT eventID FROM Tickets WHERE userId='{userId}'")
+        registered_eventids = {ev[0] for ev in cur.fetchall()}
+        for eventid in registered_eventids:
+            cur.execute(f"SELECT * FROM Eventt WHERE eventid={eventid}")
+            event = {"role":"participant"} | dict(zip(params, cur.fetchone()))
+            results.append(event)
+
+        cur.execute(f"SELECT * FROM Eventt WHERE userid='{userId}'")
+        for ev in cur.fetchall():
+            event = {"role":"host"} | dict(zip(params, ev))
+            results.append(event)
+        
         return {
             'statusCode': 200,
             'headers': {
@@ -101,7 +95,7 @@ def getUserEvents(userId):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': '*',
             },
-            'body': json.dumps(res)
+            'body': json.dumps({'events': results})
         }
     except:
         return {
