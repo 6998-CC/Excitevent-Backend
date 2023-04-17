@@ -1,0 +1,5 @@
+{
+    "path": "/user/create",
+    "httpMethod": "POST",
+    "body": "{\"user_uni\":\"fg1234\",\"user_name\":\"Fenglei Gu\",\"user_password\":\"CloudComputing\",\"user_interests\":\"Music,History\",\"user_bio\":\"None\"}"
+}

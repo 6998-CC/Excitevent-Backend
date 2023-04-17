@@ -1,0 +1,8 @@
+{
+    "path": "/user/login",
+    "httpMethod": "GET",
+    "queryStringParameters":{
+        "user_uni": "fg1234",
+        "user_password": "CloudComputing"
+    }
+}
