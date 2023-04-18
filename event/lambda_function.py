@@ -30,6 +30,17 @@ client=boto3.client('s3')
 
 
 def lambda_handler(event, context):
+    
+    # #++++++ test
+    # q = "select * from Eventt"
+    # cur = conn.cursor()
+    # cur.execute(q)
+    # # # conn.commit()
+    # res = cur.fetchall()
+    # print("=======", res)
+    # #+++++
+    
+    
     print(f"The event message is : {event}")
     httpMethod = event['httpMethod']
     path = event['path']
@@ -56,8 +67,37 @@ def lambda_handler(event, context):
         #             },
         #             'body': json.dumps(res)
         #         }
+
+        if path == '/event/myevents':
+            userid = event["queryStringParameters"]["userid"]
+            cur = conn.cursor()
+            try:
+                params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
+                cur.execute(f"SELECT * FROM Eventt WHERE userid='{userid}'")
+                results = [{"role":"host"} | dict(zip(params, ev)) for ev in cur.fetchall()]
                 
-        if path == '/event/findByTags':
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Headers': '*',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': '*',
+                    },
+                    'body': json.dumps({'events': results})
+                }
+            except:
+                return {
+                    'statusCode': 404,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Headers': '*',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': '*',
+                    },
+                    'body': json.dumps('Error!')
+                }
+        elif path == '/event/findByTags':
             # search by tag attribute
             tags = event["queryStringParameters"]["tags"]
             res_return = set()
@@ -176,7 +216,7 @@ def lambda_handler(event, context):
             cur.execute(sql_create_string)
             conn.commit()
             cur.execute(sql_string)
-            res = cur.fetchall()
+            conn.commit()
 
 
             return {
