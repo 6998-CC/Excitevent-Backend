@@ -279,7 +279,21 @@ def lambda_handler(event, context):
 
     # return
 
-    if event['path'] == '/store/inventory' and event['httpMethod'] == 'GET':
+    if event['path'] == '/store/hasticket':
+        eventId = event['queryStringParameters']['eventId']
+        userId = event['queryStringParameters']['userId']
+        if eventId is None or userId is None:
+            return {
+                'statusCode': 404,
+                'body': 'Invalid eventId or userId!'
+            }
+        cur = conn.cursor()
+        cur.execute(f"SELECT COUNT(*) FROM Tickets WHERE eventId={eventId} AND userId='{userId}'")
+        return {
+            'statusCode': 200,
+            'body': json.dumps(cur.fetchone()[0]>0)
+        }
+    elif event['path'] == '/store/inventory' and event['httpMethod'] == 'GET':
         eventId = event['queryStringParameters']['eventId']
         res = getInventory(eventId)
         # print('1',eventId)
