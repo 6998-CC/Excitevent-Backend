@@ -74,7 +74,7 @@ def lambda_handler(event, context):
             try:
                 params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
                 cur.execute(f"SELECT * FROM Eventt WHERE userid='{userid}'")
-                results = [{"role":"host"} | dict(zip(params, ev)) for ev in cur.fetchall()]
+                results = [dict(zip(params, ev)) for ev in cur.fetchall()]
                 
                 return {
                     'statusCode': 200,
