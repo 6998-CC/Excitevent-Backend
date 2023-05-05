@@ -3,11 +3,14 @@ import sys
 import logging
 import pymysql
 import boto3
+from botocore.exceptions import ClientError
 import base64
 import time
+import smtplib
+
 
 # rds settings
-rds_host  = "mysqlforlambda.c6cg9rtsaerr.us-east-1.rds.amazonaws.com"
+rds_host = "mysqlforlambda.c6cg9rtsaerr.us-east-1.rds.amazonaws.com"
 user_name = "admin"
 password = "Cloud6998!"
 db_name = "ExampleDB"
@@ -26,56 +29,111 @@ except pymysql.MySQLError as e:
 
 logger.info("SUCCESS: Connection to RDS MySQL instance succeeded")
 
-client=boto3.client('s3')
+client = boto3.client('s3')
 
 
 def lambda_handler(event, context):
-    
-    # #++++++ test
-    # q = "select * from Eventt"
-    # cur = conn.cursor()
-    # cur.execute(q)
-    # # # conn.commit()
-    # res = cur.fetchall()
-    # print("=======", res)
-    # #+++++
-    
-    
     print(f"The event message is : {event}")
     httpMethod = event['httpMethod']
     path = event['path']
     resource = event['resource']
 
-
     if httpMethod == 'GET':
-        # if path == '/event/findByStatus':
-        #     # search by status attribute
-        #     status = event["queryStringParameters"]["status"]
-        #     print(f"status is {status}")
-        #     with conn.cursor() as cur:
-        #         sql_string = f"select * from Event where status = '{status}'"
-        #         cur.execute(sql_string)
-        #         res = cur.fetchall()
+        if resource == '/event/{eventId}/invite':
+            # send out invitation through ses
+            emails = event["queryStringParameters"]["emails"]
+            userid = event["queryStringParameters"]["userid"]
+            eventid = int(event["pathParameters"]["eventId"])
 
-        #         return {
-        #             'statusCode': 200,
-        #             'headers': {
-        #                 'Content-Type': 'application/json',
-        #                 'Access-Control-Allow-Headers': '*',
-        #                 'Access-Control-Allow-Origin': '*',
-        #                 'Access-Control-Allow-Methods': '*',
-        #             },
-        #             'body': json.dumps(res)
-        #         }
+            emails = emails.split(",")
+            email_list = []
+            for i in range(0, len(emails)):
+                email = emails[i]
+                if email[0] == ' ':
+                    email_list.append(email[1:])
+                else:
+                    email_list.append(email)
 
-        if path == '/event/myevents':
+            # check whether email formate & columbia email or not
+            for email in email_list:
+                email = email.split("@")
+                if len(email) < 2:
+                    return {
+                        'statusCode': 404,
+                        'headers': {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Headers': '*',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': '*',
+                        },
+                        'body': json.dumps('Error! wrong email format')
+                    }
+                elif email[1] != 'columbia.edu':
+                    return {
+                        'statusCode': 404,
+                        'headers': {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Headers': '*',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': '*',
+                        },
+                        'body': json.dumps('Error! only columbia emails allowed')
+                    }
+
+            # find out user and event information
+            cur = conn.cursor()
+            sql_string = f"select * from Eventt where eventid = {eventid}"
+            cur.execute(sql_string)
+            res = cur.fetchall()
+            event_name = res[0][1]
+            event_location = res[0][3]
+            event_date = res[0][4]
+            event_time = res[0][5]
+            event_description = res[0][7]
+
+            sql_string = f"select * from User where user_uni = '{userid}'"
+            cur.execute(sql_string)
+            res = cur.fetchall()
+            user = res[0][1]
+
+            print(email_list)
+
+            # send out invitation through sns -> email lambda
+            sns = boto3.client('sns')
+            inputParams = {
+                "email_list": email_list,
+                "event_name": event_name,
+                "event_location": event_location,
+                "event_date": event_date,
+                "event_time": event_time,
+                "event_description": event_description,
+                "user": user
+            }
+            inputParams = json.dumps(inputParams)
+            response = sns.publish(TopicArn='arn:aws:sns:us-east-1:216308205566:emails',
+                                      Message=inputParams)
+
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Headers': '*',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': '*',
+                },
+                'body': json.dumps('Sent successfully.')
+            }
+
+        elif path == '/event/myevents':
             userid = event["queryStringParameters"]["userid"]
             cur = conn.cursor()
             try:
-                params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
+                params = (
+                    'eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url',
+                    'hostid')
                 cur.execute(f"SELECT * FROM Eventt WHERE userid='{userid}'")
                 results = [dict(zip(params, ev)) for ev in cur.fetchall()]
-                
+
                 return {
                     'statusCode': 200,
                     'headers': {
@@ -97,6 +155,7 @@ def lambda_handler(event, context):
                     },
                     'body': json.dumps('Error!')
                 }
+
         elif path == '/event/findByTags':
             # search by tag attribute
             tags = event["queryStringParameters"]["tags"]
@@ -133,7 +192,7 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps(list(res_return))
             }
-                
+
         elif resource == '/event/{eventId}':
             # search by eventid attribute
             eventid = int(event["pathParameters"]["eventId"])
@@ -143,7 +202,7 @@ def lambda_handler(event, context):
                 cur.execute(sql_string)
                 res = cur.fetchall()
                 res_return = []
-                for r in res: 
+                for r in res:
                     res_dict = dict()
                     res_dict['eventId'] = r[0]
                     res_dict['name'] = r[1]
@@ -167,8 +226,7 @@ def lambda_handler(event, context):
                     },
                     'body': json.dumps(list(res_return))
                 }
-            
-    
+
     elif httpMethod == 'POST':
         if path == '/event/createEvent':
             # create an event
@@ -185,8 +243,8 @@ def lambda_handler(event, context):
             event_capacity = data["capacity"]
             event_description = data["description"]
             event_userid = data["userid"]
-            
-             # upload image to S3 and obtain url
+
+            # upload image to S3 and obtain url
             key = str(time.time()).replace('.', '') + ".PNG"
             ms = base64.b64decode(event['body'])
             response = client.put_object(
@@ -218,7 +276,6 @@ def lambda_handler(event, context):
             cur.execute(sql_string)
             conn.commit()
 
-
             return {
                 'statusCode': 200,
                 'headers': {
@@ -229,21 +286,21 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps("Created successfully!")
             }
-        
+
         elif resource == '/event/{eventId}':
-            # update an event 
+            # update an event
             eventid = int(event["pathParameters"]["eventId"])
             data = json.loads(event["headers"]["x-amz-meta-name"])
             event_name = data["name"]
             # event_status = data["status"]
             event_tag = json.dumps(data["tag"])
-            event_location = data["location"] 
+            event_location = data["location"]
             event_date = data["date"]
             event_time = data["time"]
             event_capacity = data["capacity"]
             event_description = data["description"]
             event_userid = data["userid"]
-    
+
             # upload image to S3 and obtain url
             key = str(time.time()).replace('.', '') + ".PNG"
             ms = base64.b64decode(event['body'])
@@ -253,9 +310,9 @@ def lambda_handler(event, context):
                 Key=key,
                 ContentType='image/png',
             )
-    
+
             event_image_url = "https://excitevent-event-image.s3.amazonaws.com/" + key
-    
+
             # load the event to table
             cur = conn.cursor()
             sql_string = f"update Eventt " \
@@ -271,7 +328,7 @@ def lambda_handler(event, context):
                          f"where eventid = {eventid}"
             cur.execute(sql_string)
             conn.commit()
-    
+
             return {
                 'statusCode': 200,
                 'headers': {
@@ -282,7 +339,7 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps("Updated successfully!")
             }
-            
+
     elif httpMethod == 'DELETE':
         if resource == '/event/{eventId}':
             # delete event
@@ -303,5 +360,3 @@ def lambda_handler(event, context):
                 },
                 'body': json.dumps("Deleted successfully!")
             }
-
-
