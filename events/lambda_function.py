@@ -172,7 +172,15 @@ def lambda_handler(event, context):
                     res_dict = dict()
                     res_dict['eventId'] = r[0]
                     res_dict['name'] = r[1]
-                    res_dict['tags'] = r[2]
+                    print(f"r2 is {r[2]}")
+                    tag_list_r = json.loads(r[2])
+                    tag_str = ""
+                    for t in tag_list_r:
+                        tag_str = tag_str + t + ", "
+                    tag_str = tag_str[:-2]
+                    res_dict['tags'] = tag_str
+                    print(res_dict['tags'])
+                    print(type(res_dict['tags']))
                     res_dict['location'] = r[3]
                     res_dict['date'] = r[4]
                     res_dict['time'] = r[5]
@@ -206,7 +214,12 @@ def lambda_handler(event, context):
                     res_dict = dict()
                     res_dict['eventId'] = r[0]
                     res_dict['name'] = r[1]
-                    res_dict['tags'] = r[2]
+                    tag_list_r = json.loads(r[2])
+                    tag_str = ""
+                    for t in tag_list_r:
+                        tag_str = tag_str + t + ", "
+                    tag_str = tag_str[:-2]
+                    res_dict['tags'] = tag_str
                     res_dict['location'] = r[3]
                     res_dict['date'] = r[4]
                     res_dict['time'] = r[5]
@@ -349,6 +362,13 @@ def lambda_handler(event, context):
             sql_string = f"delete from Eventt where eventid = {eventid}"
             cur.execute(sql_string)
             conn.commit()
+            
+            eventid = event["pathParameters"]["eventId"]
+            cur = conn.cursor()
+            sql_string = f"delete from Tickets where eventId = {eventId}"
+            cur.execute(sql_string)
+            conn.commit()
+            
 
             return {
                 'statusCode': 200,
@@ -358,5 +378,5 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Methods': '*',
                 },
-                'body': json.dumps("Deleted successfully!")
+                'body': json.dumps("Deleted event successfully!")
             }
