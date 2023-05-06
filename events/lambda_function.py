@@ -8,7 +8,6 @@ import base64
 import time
 import smtplib
 
-
 # rds settings
 rds_host = "mysqlforlambda.c6cg9rtsaerr.us-east-1.rds.amazonaws.com"
 user_name = "admin"
@@ -111,7 +110,7 @@ def lambda_handler(event, context):
             }
             inputParams = json.dumps(inputParams)
             response = sns.publish(TopicArn='arn:aws:sns:us-east-1:216308205566:emails',
-                                      Message=inputParams)
+                                   Message=inputParams)
 
             return {
                 'statusCode': 200,
@@ -249,7 +248,18 @@ def lambda_handler(event, context):
             print(type(data))
             event_name = data["name"]
             # event_status = data["status"]
-            event_tag = json.dumps(data["tag"])
+
+            event_tag = "["
+            for w in data["tag"].split(", "):
+                event_tag += '"'
+                event_tag += w
+                event_tag += '"'
+                event_tag += ", "
+            event_tag = event_tag[:-2]
+            event_tag += "]"
+            print(event_tag)
+            print(type(event_tag))
+
             event_location = data["location"]
             event_date = data["date"]
             event_time = data["time"]
@@ -306,7 +316,16 @@ def lambda_handler(event, context):
             data = json.loads(event["headers"]["x-amz-meta-name"])
             event_name = data["name"]
             # event_status = data["status"]
-            event_tag = json.dumps(data["tag"])
+            event_tag = "["
+            for w in data["tag"].split(", "):
+                event_tag += '"'
+                event_tag += w
+                event_tag += '"'
+                event_tag += ", "
+            event_tag = event_tag[:-2]
+            event_tag += "]"
+            print(event_tag)
+            print(type(event_tag))
             event_location = data["location"]
             event_date = data["date"]
             event_time = data["time"]
@@ -362,13 +381,12 @@ def lambda_handler(event, context):
             sql_string = f"delete from Eventt where eventid = {eventid}"
             cur.execute(sql_string)
             conn.commit()
-            
+
             eventid = event["pathParameters"]["eventId"]
             cur = conn.cursor()
-            sql_string = f"delete from Tickets where eventId = {eventId}"
+            sql_string = f"delete from Tickets where eventId = {eventid}"
             cur.execute(sql_string)
             conn.commit()
-            
 
             return {
                 'statusCode': 200,
