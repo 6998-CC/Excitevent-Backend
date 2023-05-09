@@ -26,6 +26,42 @@ logger.info("SUCCESS: Connection to RDS MySQL instance succeeded")
 client = boto3.client('s3')
 
 
+def getAttendee(eventId):
+    cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT userId FROM Tickets WHERE eventID={eventId}")
+        peers = [user[0] for user in cur.fetchall()]
+        results = list()
+        for peer in peers:
+            cur.execute(f"SELECT user_name FROM User WHERE user_uni='{peer}'")
+            name = cur.fetchone()
+            if name:
+                results.append(name[0])
+        results.sort()
+
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': '*',
+            },
+            'body': json.dumps(results)
+        }
+    except:
+        return {
+            'statusCode': 404,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': '*',
+            },
+            'body': json.dumps('Error!')
+        }
+
+
 def getInventory(eventId):  # given certain eventId return remaining spots
     cur = conn.cursor()
 
@@ -65,6 +101,12 @@ def getInventory(eventId):  # given certain eventId return remaining spots
     res["remaining"] = remaining
     return {
         'statusCode': 200,
+        'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': '*',
+            },
         'body': json.dumps(res)
     }
 
@@ -73,20 +115,22 @@ def getUserEvents(userId):
     cur = conn.cursor()
 
     try:
-        results = list()
-        params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
-        cur.execute(f"SELECT eventID FROM Tickets WHERE userId='{userId}'")
-        registered_eventids = {ev[0] for ev in cur.fetchall()}
-        for eventid in registered_eventids:
-            cur.execute(f"SELECT * FROM Eventt WHERE eventid={eventid}")
-            event = {"role":"participant"} | dict(zip(params, cur.fetchone()))
-            results.append(event)
-
-        cur.execute(f"SELECT * FROM Eventt WHERE userid='{userId}'")
-        for ev in cur.fetchall():
-            event = {"role":"host"} | dict(zip(params, ev))
-            results.append(event)
-        
+        query = "SELECT e.eventid, e.name, e.date, e.time, e.userid " \
+                "FROM Tickets t, Eventt e " \
+                f"WHERE t.eventId=e.eventid AND t.userId='{userId}' " 
+        cur.execute(query)
+        registered = cur.fetchall()
+        # print(registered)
+        res = {}
+        res['events'] = []
+        for r in registered:
+            data = {}
+            data['eventId'] = r[0]
+            data['name'] = r[1]
+            data['date'] = r[2]
+            data['time'] = r[3]
+            data['editable'] = r[4] == userId
+            res['events'].append(data)
         return {
             'statusCode': 200,
             'headers': {
@@ -95,7 +139,7 @@ def getUserEvents(userId):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': '*',
             },
-            'body': json.dumps({'events': results})
+            'body': json.dumps(res)
         }
     except:
         return {
@@ -250,6 +294,36 @@ def getOrderDetails(orderId):  # given orderId, return event and user
             },
             'body': json.dumps('Internal Server Error! Failed to retrieve!')
         }
+        
+def deleteOrder(eventId,userId):
+    cur = conn.cursor()
+    try:
+        query = f"DELETE FROM Tickets WHERE userId='{userId}' AND eventId={eventId}"
+        cur.execute(query)
+        conn.commit()
+
+    except:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': '*',
+            },
+            'body': json.dumps('Internal Server Error! Failed to delete!')
+        }
+
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': '*',
+        },
+        'body': json.dumps('Delete successfully!')
+    }
 
 
 def lambda_handler(event, context):
@@ -262,7 +336,11 @@ def lambda_handler(event, context):
     #                     "FOREIGN KEY (userId) REFERENCES User(user_uni) ON DELETE CASCADE, " \
     #                     "PRIMARY KEY (ticketId));"
 
-    # q = "select * from Eventt"
+    q = "select * from Eventt"
+    
+
+    # q = "UPDATE Eventt SET location='30 Morningside Dr, New York, NY 10025' WHERE eventid>100"
+    
     # q= "SELECT e.eventid, e.name, e.date, e.time, e.userid " \
     #             "FROM Tickets t, Eventt e " \
     #             f"WHERE t.eventId=e.eventid AND t.userId='qw1234' " \
@@ -271,11 +349,11 @@ def lambda_handler(event, context):
     #             "FROM Eventt e " \
     #             f"WHERE e.userid='qw1234'"
 
-    # cur = conn.cursor()
-    # cur.execute(q)
-    # # conn.commit()
-    # res = cur.fetchall()
-    # print("=======", res)
+    cur = conn.cursor()
+    cur.execute(q)
+    # conn.commit()
+    res = cur.fetchall()
+    print("=======", res)
 
     # return
 
@@ -285,19 +363,37 @@ def lambda_handler(event, context):
         if eventId is None or userId is None:
             return {
                 'statusCode': 404,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Headers': '*',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': '*',
+                },
                 'body': 'Invalid eventId or userId!'
             }
         cur = conn.cursor()
         cur.execute(f"SELECT COUNT(*) FROM Tickets WHERE eventId={eventId} AND userId='{userId}'")
         return {
             'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': '*',
+            },
             'body': json.dumps(cur.fetchone()[0]>0)
         }
+    elif event['path'] == '/store/attendee' and event['httpMethod'] == 'GET':
+        eventId = event['queryStringParameters']['eventId']
+        return getAttendee(eventId)
+    elif event['path'] == '/store/deleteorder' and event['httpMethod'] == 'DELETE':
+        eventId = event['queryStringParameters']['eventId']
+        userId = event['queryStringParameters']['userId']
+        res = deleteOrder(eventId,userId)
     elif event['path'] == '/store/inventory' and event['httpMethod'] == 'GET':
         eventId = event['queryStringParameters']['eventId']
         res = getInventory(eventId)
-        # print('1',eventId)
-    elif event['path'] == '/store/getuserevents' and event['httpMethod'] == 'GET':
+    elif event['path'] == '/store/mytickets' and event['httpMethod'] == 'GET':
         userId = event['queryStringParameters']['userId']
         res = getUserEvents(userId)
         print('triggered')
