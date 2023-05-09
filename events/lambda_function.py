@@ -38,7 +38,43 @@ def lambda_handler(event, context):
     resource = event['resource']
 
     if httpMethod == 'GET':
-        if resource == '/event/{eventId}/invite':
+        if resource == '/event/{eventId}/attendee':
+            eventID = event["pathParameters"]["eventId"]
+            cur = conn.cursor()
+            try:
+                cur.execute(f"SELECT userId FROM Tickets WHERE eventID={eventID}")
+                peers = [user[0] for user in cur.fetchall()]
+                results = list()
+                for peer in peers:
+                    cur.execute(f"SELECT user_name FROM User WHERE user_uni='{peer}'")
+                    name = cur.fetchone()
+                    if name:
+                        results.append(name[0])
+                results.sort()
+
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Headers': '*',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': '*',
+                    },
+                    'body': json.dumps(results)
+                }
+            except:
+                return {
+                    'statusCode': 404,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Headers': '*',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': '*',
+                    },
+                    'body': json.dumps('Error!')
+                }
+
+        elif resource == '/event/{eventId}/invite':
             # send out invitation through ses
             emails = event["queryStringParameters"]["emails"]
             userid = event["queryStringParameters"]["userid"]
