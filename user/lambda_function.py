@@ -110,26 +110,31 @@ def lambda_handler(event, context):
                         preferred_events[ev[0]] = 0
                 for event_id in preferred_events:
                     cur.execute(f"SELECT COUNT(*) FROM Click WHERE event_id='{event_id}'")
-                    preferred_events[event_id] = cur.fetchone()[0]
+                    for clk in cur.fetchall():
+                        preferred_events[event_id] += clk[0]
                 if len(similar_users)==0:
                     print("No similar users. Will only look at trending events.")
+                # else:
+                #     print(similar_users)
                 cur.execute(f"SELECT event_id, COUNT(user_uni) \
                             FROM Click \
                             GROUP BY event_id \
                             ORDER BY COUNT(user_uni) DESC")
                 trending = [ev[0] for ev in cur.fetchall() if ev[0] not in preferred_events]
-                preferred_events = list(sorted(preferred_events.items(), key=lambda x:x[1])) + trending
+                preferred_events = list(sorted(preferred_events.keys(), key=lambda x:preferred_events[x])) + trending
                 cur.execute(f"SELECT eventid FROM Eventt")
                 all_events = preferred_events + \
                     [ev[0] for ev in cur.fetchall() if ev[0] not in set(preferred_events)]
                 params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
                 results = list()
+                counter = 0
                 for ev in all_events:
-                    print(ev)
+                    if(counter>=50):
+                        break
                     cur.execute(f"SELECT * FROM Eventt WHERE eventid = {ev}")
                     res = cur.fetchall()
                     if len(res)>0:
-                        print("good")
+                        counter += 1
                         results.append(dict(zip(params, res[0])))
             except:
                 return headers | {
