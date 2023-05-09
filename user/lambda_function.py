@@ -30,7 +30,19 @@ def connect_to_db():
         sys.exit()
     else:
         with conn.cursor() as cur:
-            cur.execute(f"CREATE TABLE IF NOT EXISTS User (user_uni VARCHAR(10) NOT NULL, user_name VARCHAR(22) NOT NULL, user_password VARCHAR(16) NOT NULL, user_interests VARCHAR(255), user_bio VARCHAR(255), PRIMARY KEY (user_uni))")
+            cur.execute(f"CREATE TABLE IF NOT EXISTS User (\
+                user_uni VARCHAR(10) NOT NULL, \
+                user_name VARCHAR(22) NOT NULL, \
+                user_password VARCHAR(16) NOT NULL, \
+                user_interests VARCHAR(255), \
+                user_bio VARCHAR(255), \
+                PRIMARY KEY (user_uni)\
+            )")
+            cur.execute(f"CREATE TABLE IF NOT EXISTS Click(\
+                user_uni VARCHAR(10) NOT NULL, \
+                event_id INT NOT NULL, \
+                tm TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\
+            )")
             conn.commit()
         logger.info("SUCCESS: Connection to RDS MySQL instance succeeded")
         return conn
@@ -52,7 +64,85 @@ def lambda_handler(event, context):
     httpMethod = event['httpMethod']
     resource = str(event['resource'])
 
-    if resource == '/user/create':
+    if resource == '/user/click':
+        body = json.loads(event['body'])
+        user_uni = body["user_uni"]
+        event_id = body["event_id"]
+        if(user_uni is None or event_id is None):
+            return headers | {
+                'statusCode': 400,
+                'body': json.dumps('Bad Request!')
+            }
+        with conn.cursor() as cur:
+            try:
+                cur.execute(f"INSERT INTO Click (user_uni, event_id) VALUES ('{user_uni}', {event_id})")
+                conn.commit()
+            except:
+                return headers | {
+                    'statusCode': 500,
+                    'body': json.dumps('Internal Server Error! Failed to record the click!')
+                }
+            return headers | {
+                'statusCode': 200,
+                'body': json.dumps('Click recoreded successfully!')
+            }
+
+    elif resource == '/user/recommend':
+        user_uni = event["queryStringParameters"]["user_uni"]
+        if(user_uni is None):
+            return headers | {
+                'statusCode': 400,
+                'body': json.dumps('Bad Request!')
+            }
+        with conn.cursor() as cur:
+            try:
+                cur.execute(f"SELECT eventId FROM Tickets WHERE userId='{user_uni}'")
+                registered_events = {ev[0] for ev in cur.fetchall()}
+                similar_users = set()
+                for event_id in registered_events:
+                    cur.execute(f"SELECT userId FROM Tickets WHERE eventId={event_id}")
+                    similar_users.update({user[0] for user in cur.fetchall()})
+                similar_users.discard(user_uni)
+                preferred_events = dict()
+                for peer in similar_users:
+                    cur.execute(f"SELECT event_id FROM Click WHERE user_uni='{peer}'")
+                    for ev in cur.fetchall():
+                        preferred_events[ev[0]] = 0
+                for event_id in preferred_events:
+                    cur.execute(f"SELECT COUNT(*) FROM Click WHERE event_id='{event_id}'")
+                    preferred_events[event_id] = cur.fetchone()[0]
+                if len(similar_users)==0:
+                    print("No similar users. Will only look at trending events.")
+                cur.execute(f"SELECT event_id, COUNT(user_uni) \
+                            FROM Click \
+                            GROUP BY event_id \
+                            ORDER BY COUNT(user_uni) DESC")
+                trending = [ev[0] for ev in cur.fetchall() if ev[0] not in preferred_events]
+                preferred_events = list(sorted(preferred_events.items(), key=lambda x:x[1])) + trending
+                cur.execute(f"SELECT eventid FROM Eventt")
+                all_events = preferred_events + \
+                    [ev[0] for ev in cur.fetchall() if ev[0] not in set(preferred_events)]
+                params = ('eventId', 'name', 'tags', 'location', 'date', 'time', 'capacity', 'description', 'image_url', 'hostid')
+                results = list()
+                for ev in all_events:
+                    print(ev)
+                    cur.execute(f"SELECT * FROM Eventt WHERE eventid = {ev}")
+                    res = cur.fetchall()
+                    if len(res)>0:
+                        print("good")
+                        results.append(dict(zip(params, res[0])))
+            except:
+                return headers | {
+                    'statusCode': 500,
+                    'body': json.dumps('Internal Server Error! Failed to recommend!')
+                }
+            return headers | {
+                'statusCode': 200,
+                'body': json.dumps(results)
+            }
+        
+
+    elif resource == '/user/create':
         body = json.loads(event['body'])
         user_uni = body["user_uni"]
         user_name = body["user_name"]
